@@ -118,5 +118,6 @@ class DDPG(object):
 
 
 	def load(self, filename, directory):
-		self.actor.load_state_dict(torch.load('%s/%s_actor.pth' % (directory, filename)))
-		self.critic.load_state_dict(torch.load('%s/%s_critic.pth' % (directory, filename)))
+		map_location = None if torch.cuda.is_available() else 'cpu'
+		self.actor.load_state_dict(torch.load('%s/%s_actor.pth' % (directory, filename), map_location=map_location))
+		self.critic.load_state_dict(torch.load('%s/%s_critic.pth' % (directory, filename), map_location=map_location))
