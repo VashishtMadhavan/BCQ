@@ -1,29 +1,21 @@
 import numpy as np
 import torch
 import torch.nn as nn
-from torch.autograd import Variable
 import torch.nn.functional as F
 import utils
-
-
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-
 
 # Implementation of Deep Deterministic Policy Gradients (DDPG)
 # Paper: https://arxiv.org/abs/1509.02971
-
 
 # Returns an action for a given state
 class Actor(nn.Module):
 	def __init__(self, state_dim, action_dim, max_action):
 		super(Actor, self).__init__()
-
 		self.l1 = nn.Linear(state_dim, 400)
 		self.l2 = nn.Linear(400, 300)
-		self.l3 = nn.Linear(300, action_dim)
-		
+		self.l3 = nn.Linear(300, action_dim)		
 		self.max_action = max_action
-
 	
 	def forward(self, state):
 		a = F.relu(self.l1(state))
@@ -31,23 +23,19 @@ class Actor(nn.Module):
 		a = self.max_action * torch.tanh(self.l3(a)) 
 		return a
 
-
 # Returns a Q-value for given state/action pair
 class Critic(nn.Module):
 	def __init__(self, state_dim, action_dim):
 		super(Critic, self).__init__()
-
 		self.l1 = nn.Linear(state_dim, 400)
 		self.l2 = nn.Linear(400 + action_dim, 300)
 		self.l3 = nn.Linear(300, 1)
-
 
 	def forward(self, state, action):
 		q = F.relu(self.l1(state))
 		q = F.relu(self.l2(torch.cat([q, action], 1)))
 		q = self.l3(q)
 		return q
-
 
 class DDPG(object):
 	def __init__(self, state_dim, action_dim, max_action):
@@ -60,19 +48,15 @@ class DDPG(object):
 		self.critic_target = Critic(state_dim, action_dim).to(device)
 		self.critic_target.load_state_dict(self.critic.state_dict())
 		self.critic_optimizer = torch.optim.Adam(self.critic.parameters(), weight_decay=1e-2)
-
 		self.state_dim = state_dim
 
-
 	def select_action(self, state):
-		state = torch.FloatTensor(state.reshape(1, -1)).to(device)
-		return self.actor(state).cpu().data.numpy().flatten()
-
+		with torch.no_grad():
+			state = torch.FloatTensor(state).to(device)
+			return self.actor(state).cpu().numpy().flatten()
 
 	def train(self, replay_buffer, iterations=500, batch_size=100, discount=0.99, tau=0.005): 
-
 		for it in range(iterations):
-
 			# Each of these are batches 
 			state, next_state, action, reward, done = replay_buffer.sample(batch_size)
 			state 		= torch.FloatTensor(state).to(device)
@@ -111,11 +95,9 @@ class DDPG(object):
 			for param, target_param in zip(self.actor.parameters(), self.actor_target.parameters()):
 				target_param.data.copy_(tau * param.data + (1 - tau) * target_param.data)
 
-
 	def save(self, filename, directory):
 		torch.save(self.actor.state_dict(), '%s/%s_actor.pth' % (directory, filename))
 		torch.save(self.critic.state_dict(), '%s/%s_critic.pth' % (directory, filename))
-
 
 	def load(self, filename, directory):
 		map_location = None if torch.cuda.is_available() else 'cpu'
