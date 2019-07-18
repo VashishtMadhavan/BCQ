@@ -11,9 +11,9 @@ import TD3
 if __name__ == "__main__":
 	
 	parser = argparse.ArgumentParser()
-	parser.add_argument("--env_name", default="Ant-v2")
-	parser.add_argument("--file_name", default="TD3_Ant-v2_0")
-	parser.add_argument("--test_eps", default=10)
+	parser.add_argument("--env_name", type=str, default="Ant-v2")
+	parser.add_argument("--file_name", type=str, default="TD3_Ant-v2_0")
+	parser.add_argument("--test_eps", type=int, default=10)
 	parser.add_argument("--render",  action="store_true")
 	args = parser.parse_args()
 
