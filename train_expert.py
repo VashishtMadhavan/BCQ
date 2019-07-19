@@ -23,6 +23,7 @@ if __name__ == "__main__":
 	parser.add_argument("--batch_size", default=100, type=int)			# Batch size for actor and critic
 	parser.add_argument("--discount", default=0.99, type=float)			# Discount factor for training
 	parser.add_argument("--tau", default=0.005, type=float)				# Target newtork update rate
+	parser.add_argument("--K", default=1, type=int)					# Number of ensemble members
 
 	# TD3 specific parameters
 	parser.add_argument("--policy_noise", default=0.2, type=float)		# Noise added to target policy during critic update
@@ -52,9 +53,9 @@ if __name__ == "__main__":
 
 	# Initialize policy and buffer
 	if args.algo == 'TD3':
-		policy = TD3.TD3(state_dim, action_dim, max_action)
+		policy = TD3.TD3(state_dim, action_dim, max_action, K=args.K)
 	else:
-		policy = DDPG.DDPG(state_dim, action_dim, max_action)
+		policy = DDPG.DDPG(state_dim, action_dim, max_action, K=args.K)
 	replay_buffer = utils.ReplayBuffer()
 	total_timesteps = 0
 	total_episodes = 0

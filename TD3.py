@@ -22,6 +22,16 @@ class Actor(nn.Module):
 		x = self.max_action * torch.tanh(self.l3(x)) 
 		return x
 
+class EnsembleActor(nn.Module):
+	def __init__(self, state_dim, action_dim, max_action, K=5):
+		super(EnsembleActor, self).__init__()
+		self.K = K
+		self.models = nn.ModuleList([Actor(state_dim, action_dim, max_action) for _ in range(self.K)])
+
+	def forward(self, x):
+		x = torch.stack([self.models[i](x) for i in range(self.K)])
+		return x
+
 class Critic(nn.Module):
 	def __init__(self, state_dim, action_dim):
 		super(Critic, self).__init__()
@@ -50,15 +60,48 @@ class Critic(nn.Module):
 		x1 = F.relu(self.l2(x1))
 		return self.l3(x1)
 
+class EnsembleCritic(nn.Module):
+	def __init__(self, state_dim, action_dim, K=5):
+		super(EnsembleCritic, self).__init__()
+		self.K = K
+		self.models = nn.ModuleList([Critic(state_dim, action_dim) for _ in range(self.K)])
+
+	def forward(self, x, a):
+		q1s = []; q2s = []
+		for i in range(self.K):
+			if len(a.shape) == 2:
+				q1, q2 = self.models[i](x, a)
+			else:
+				q1, q2 = self.models[i](x, a[i])
+			q1s.append(q1); q2s.append(q2)
+		return torch.stack(q1s), torch.stack(q2s)
+
+	def Q1(self, x, a):
+		qs = []
+		for i in range(self.K):
+			if len(a.shape) == 2:
+				qs.append(self.models[i].Q1(x, a))
+			else:
+				qs.append(self.models[i].Q1(x, a[i]))
+		return torch.stack(qs)
+
+
 class TD3(object):
-	def __init__(self, state_dim, action_dim, max_action):
-		self.actor = Actor(state_dim, action_dim, max_action).to(device)
-		self.actor_target = Actor(state_dim, action_dim, max_action).to(device)
+	def __init__(self, state_dim, action_dim, max_action, K=1):
+		self.K = K
+		if self.K == 1:
+			self.actor = Actor(state_dim, action_dim, max_action).to(device)
+			self.actor_target = Actor(state_dim, action_dim, max_action).to(device)
+			self.critic = Critic(state_dim, action_dim).to(device)
+			self.critic_target = Critic(state_dim, action_dim).to(device)
+		else:
+			self.actor = EnsembleActor(state_dim, action_dim, max_action, K=self.K).to(device)
+			self.actor_target = EnsembleActor(state_dim, action_dim, max_action, K=self.K).to(device)
+			self.critic = EnsembleCritic(state_dim, action_dim, K=self.K).to(device)
+			self.critic_target = EnsembleCritic(state_dim, action_dim, K=self.K).to(device)
+
 		self.actor_target.load_state_dict(self.actor.state_dict())
 		self.actor_optimizer = torch.optim.Adam(self.actor.parameters())
-
-		self.critic = Critic(state_dim, action_dim).to(device)
-		self.critic_target = Critic(state_dim, action_dim).to(device)
 		self.critic_target.load_state_dict(self.critic.state_dict())
 		self.critic_optimizer = torch.optim.Adam(self.critic.parameters())
 		self.max_action = max_action
@@ -66,7 +109,12 @@ class TD3(object):
 	def select_action(self, state):
 		with torch.no_grad():
 			state = torch.FloatTensor(state).to(device)
-			return self.actor(state).cpu().numpy()
+			if self.K == 1:
+				return self.actor(state).cpu().numpy()
+			else:
+				ensemble_idx = np.random.choice(range(self.K))
+				total_actions = self.actor(state).cpu().numpy()
+				return total_actions[ensemble_idx]
 
 	def train(self, replay_buffer, iterations, batch_size=100, discount=0.99, tau=0.005, policy_noise=0.2, noise_clip=0.5, policy_freq=2):
 		for it in range(iterations):
@@ -78,8 +126,12 @@ class TD3(object):
 			reward 		= torch.FloatTensor(reward).to(device)
 			done 		= torch.FloatTensor(1 - done).to(device)
 
-			# Select action according to policy and add clipped noise 
-			noise = torch.FloatTensor(act).data.normal_(0, policy_noise).to(device)
+			# Select action according to policy and add clipped noise
+			if self.K == 1:
+				noise = torch.FloatTensor(act).data.normal_(0, policy_noise).to(device)
+			else:
+				ens_act = np.repeat(np.expand_dims(act, 0), 2, axis=0)
+				noise = torch.FloatTensor(ens_act).data.normal_(0, policy_noise).to(device)
 			noise = noise.clamp(-noise_clip, noise_clip)
 			next_action = (self.actor_target(next_state) + noise).clamp(-self.max_action, self.max_action)
 
@@ -92,7 +144,7 @@ class TD3(object):
 			current_Q1, current_Q2 = self.critic(state, action)
 
 			# Compute critic loss
-			critic_loss = F.mse_loss(current_Q1, target_Q) + F.mse_loss(current_Q2, target_Q) 
+			critic_loss = F.mse_loss(current_Q1, target_Q) + F.mse_loss(current_Q2, target_Q)
 
 			# Optimize the critic
 			self.critic_optimizer.zero_grad()
