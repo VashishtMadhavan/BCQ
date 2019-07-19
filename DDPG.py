@@ -14,7 +14,7 @@ class Actor(nn.Module):
 		super(Actor, self).__init__()
 		self.l1 = nn.Linear(state_dim, 400)
 		self.l2 = nn.Linear(400, 300)
-		self.l3 = nn.Linear(300, action_dim)		
+		self.l3 = nn.Linear(300, action_dim)
 		self.max_action = max_action
 	
 	def forward(self, state):
