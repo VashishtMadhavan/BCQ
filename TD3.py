@@ -85,7 +85,6 @@ class EnsembleCritic(nn.Module):
 				qs.append(self.models[i].Q1(x, a[i]))
 		return torch.stack(qs)
 
-
 class TD3(object):
 	def __init__(self, state_dim, action_dim, max_action, K=1):
 		self.K = K
@@ -116,10 +115,15 @@ class TD3(object):
 				total_actions = self.actor(state).cpu().numpy()
 				return total_actions[ensemble_idx]
 
-	def train(self, replay_buffer, iterations, batch_size=100, discount=0.99, tau=0.005, policy_noise=0.2, noise_clip=0.5, policy_freq=2):
+	def train(self, replay_buffer, iterations, batch_size=100, discount=0.99, tau=0.005, 
+		policy_noise=0.2, noise_clip=0.5, policy_freq=2, priority=False, total_steps=1000):
 		for it in range(iterations):
 			# Sample replay buffer 
-			state, next_state, act, reward, done = replay_buffer.sample(batch_size)
+			if priority:
+				state, next_state, act, reward, done, weights, idxes = replay_buffer.sample(batch_size, total_steps)
+				weights = torch.FloatTensor(weights).to(device)
+			else:
+				state, next_state, act, reward, done = replay_buffer.sample(batch_size)
 			state 		= torch.FloatTensor(state).to(device)
 			action 		= torch.FloatTensor(act).to(device)
 			next_state 	= torch.FloatTensor(next_state).to(device)
@@ -130,7 +134,7 @@ class TD3(object):
 			if self.K == 1:
 				noise = torch.FloatTensor(act).data.normal_(0, policy_noise).to(device)
 			else:
-				ens_act = np.repeat(np.expand_dims(act, 0), 2, axis=0)
+				ens_act = np.repeat(np.expand_dims(act, 0), self.K, axis=0)
 				noise = torch.FloatTensor(ens_act).data.normal_(0, policy_noise).to(device)
 			noise = noise.clamp(-noise_clip, noise_clip)
 			next_action = (self.actor_target(next_state) + noise).clamp(-self.max_action, self.max_action)
@@ -144,11 +148,17 @@ class TD3(object):
 			current_Q1, current_Q2 = self.critic(state, action)
 
 			# Compute critic loss
-			critic_loss = F.mse_loss(current_Q1, target_Q) + F.mse_loss(current_Q2, target_Q)
+			critic_loss = F.mse_loss(current_Q1, target_Q, reduction='none') + F.mse_loss(current_Q2, target_Q, reduction='none')
+
+			# Update priorities with TD error
+			replay_buffer.update_priorities(idxes, critic_loss.detach().cpu().numpy().squeeze())
 
 			# Optimize the critic
 			self.critic_optimizer.zero_grad()
-			critic_loss.backward()
+			if priority:
+				torch.mean(weights * critic_loss).backward()
+			else:
+				torch.mean(critic_loss).backward()
 			self.critic_optimizer.step()
 
 			# Delayed policy updates

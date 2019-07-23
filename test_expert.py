@@ -15,6 +15,7 @@ if __name__ == "__main__":
 	parser.add_argument("--checkpoint", type=str)
 	parser.add_argument("--test_eps", type=int, default=10)
 	parser.add_argument("--render",  action="store_true")
+	parser.add_argument("--K", type=int, default=1)
 	args = parser.parse_args()
 
 	env = gym.make(args.env)
@@ -30,9 +31,9 @@ if __name__ == "__main__":
 
 	# Initialize policy and buffer
 	if algo == "DDPG":
-		policy = DDPG.DDPG(state_dim, action_dim, max_action)
+		policy = DDPG.DDPG(state_dim, action_dim, max_action, K=args.K)
 	else:
-		policy = TD3.TD3(state_dim, action_dim, max_action)
+		policy = TD3.TD3(state_dim, action_dim, max_action, K=args.K)
 	policy.load(file_name, directory='./{}'.format(directory))
 	episode_num = 0; R = []; T = []
 

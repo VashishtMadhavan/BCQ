@@ -42,6 +42,13 @@ if __name__ == "__main__":
 	if not os.path.exists("./her_models"):
 		os.makedirs("./her_models")
 
+	# Saving config parameters
+	config_file_name = file_name + "_config.json"
+	with open("./pytorch_models/" + config_file_name, 'w') as f:
+		config_dict = {k: v for (k, v) in vars(args).items()}
+		json.dump(config_dict, f, indent=2)
+
+
 	env = gym.make(args.env_name)
 	eval_env = gym.make(args.env_name)
 
