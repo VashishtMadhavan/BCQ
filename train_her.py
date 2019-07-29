@@ -18,6 +18,7 @@ if __name__ == "__main__":
 	parser.add_argument("--max_timesteps", default=10e6, type=float)		# Max time steps to run environment for
 	parser.add_argument("--start_timesteps", default=1e4, type=int)		# How many time steps purely random policy is run for
 	parser.add_argument("--test_eps", default=10, type=int)             # Number of evaluation episodes to run
+	parser.add_argument("--gpu", default=0, type=int)					# Which GPU to use; -1 for CPU
 
 	# training parameters
 	parser.add_argument("--expl_noise", default=0.1, type=float)		# Std of Gaussian exploration noise
@@ -41,6 +42,8 @@ if __name__ == "__main__":
 
 	if not os.path.exists("./her_models"):
 		os.makedirs("./her_models")
+
+	os.environ['CUDA_VISIBLE_DEVICES'] = str(args.gpu)
 
 	# Saving config parameters
 	config_file_name = file_name + "_config.json"
