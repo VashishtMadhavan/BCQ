@@ -46,6 +46,19 @@ class EnsembleActor(nn.Module):
 		x = torch.stack([self.models[i](x) for i in range(self.K)])
 		return x
 
+class RPFActor(nn.Module):
+	def __init__(self, state_dim, action_dim, max_action, K=5):
+		super(RPFActor, self).__init__()
+		self.K = K
+		self.priors = nn.ModuleList([Actor(state_dim, action_dim, max_action) for _ in range(self.K)])
+		self.models = nn.ModuleList([Actor(state_dim, action_dim, max_action) for _ in range(self.K)])
+		for p in self.priors.parameters():
+			p.requires_grad = False
+
+	def forward(self, x):
+		x = torch.stack([self.priors[i].detach() + self.models[i](x) for i in range(self.K)])
+		return x
+
 class Critic(nn.Module):
 	def __init__(self, state_dim, action_dim):
 		super(Critic, self).__init__()
@@ -97,6 +110,36 @@ class EnsembleCritic(nn.Module):
 				qs.append(self.models[i].Q1(x, a))
 			else:
 				qs.append(self.models[i].Q1(x, a[i]))
+		return torch.stack(qs)
+
+class RPFCritic(nn.Module):
+	def __init__(self, state_dim, action_dim, K=5):
+		super(RPFCritic, self).__init__()
+		self.K = K
+		self.priors = nn.ModuleList([Critic(state_dim, action_dim) for _ in range(self.K)])
+		self.models = nn.ModuleList([Critic(state_dim, action_dim) for _ in range(self.K)])
+		for p in self.priors.parameters():
+			p.requires_grad = False
+
+	def forward(self, x, a):
+		q1s = []; q2s = []
+		for i in range(self.K):
+			if len(a.shape) == 2:
+				q1, q2 = self.models[i](x, a)
+				p_q1, p_q2 = self.priors[i](x, a)
+			else:
+				q1, q2 = self.models[i](x, a[i])
+				p_q1, p_q2 = self.priors[i](x, a[i])
+			q1s.append(q1 + p_q1.detach()); q2s.append(q2 + p_q2.detach())
+		return torch.stack(q1s), torch.stack(q2s)
+
+	def Q1(self, x, a):
+		qs = []
+		for i in range(self.K):
+			if len(a.shape) == 2:
+				qs.append(self.priors[i].Q1(x, a).detach() + self.models[i].Q1(x, a))
+			else:
+				qs.append(self.priors[i].Q1(x, a[i]).detach() + self.models[i].Q1(x, a[i]))
 		return torch.stack(qs)
 
 class TD3(object):
@@ -188,7 +231,6 @@ class TD3(object):
 
 			# Get current Q estimates
 			current_Q1, current_Q2 = self.critic(state, action)
-			td_error = torch.abs(current_Q1 - target_Q) + torch.abs(current_Q2 - target_Q)
 
 			# Compute critic loss
 			critic_loss = F.mse_loss(current_Q1, target_Q, reduction='none') + F.mse_loss(current_Q2, target_Q, reduction='none')
@@ -196,7 +238,7 @@ class TD3(object):
 			# Updating priorities
 			if priority:
 				if self.K == 1:
-					priorities = td_error.detach().cpu().numpy().squeeze()
+					priorities = critic_loss.detach().cpu().numpy().squeeze()
 				else:
 					# Estimating Jensen-Renyi divergence between policies
 					priorities = self._jrd(state)
