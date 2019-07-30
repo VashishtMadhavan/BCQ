@@ -25,6 +25,14 @@ if __name__ == "__main__":
 	parser.add_argument("--batch_size", default=100, type=int)			# Batch size for actor and critic
 	parser.add_argument("--discount", default=0.99, type=float)			# Discount factor for training
 	parser.add_argument("--tau", default=0.005, type=float)				# Target newtork update rate
+	parser.add_argument("--K", default=1, type=int)						# Number of ensemble members
+	parser.add_argument("--rpf", action="store_true")					# Whether to use randomized prior functions
+
+	# prioritized replay params
+	parser.add_argument("--priority", action="store_true")				# Whether or not to use prioritization
+	parser.add_argument("--alpha", default=0.6, type=float)
+	parser.add_argument("--beta", default=0.4, type=float)
+	parser.add_argument("--eps", default=1e-6, type=float)
 
 	# TD3 specific parameters
 	parser.add_argument("--policy_noise", default=0.2, type=float)		# Noise added to target policy during critic update
@@ -32,7 +40,7 @@ if __name__ == "__main__":
 	parser.add_argument("--policy_freq", default=2, type=int)			# Frequency of delayed policy updates
 
 	# HER specific parameters
-	parser.add_argument("--k", default=4, type=int) 					# number of goals to relabel experience with in an episode
+	parser.add_argument("--hindsight_goals", default=4, type=int).      # number of goals to relabel experience with in an episode
 	args = parser.parse_args()
 
 	file_name = "HER_%s_%s" % (args.env_name, str(args.seed))
@@ -43,14 +51,17 @@ if __name__ == "__main__":
 	if not os.path.exists("./her_models"):
 		os.makedirs("./her_models")
 
-	os.environ['CUDA_VISIBLE_DEVICES'] = str(args.gpu)
+	if torch.cuda.is_available():
+		torch.cuda.set_device(args.gpu)
+		device = torch.device("cuda")
+	else:
+		device = torch.device("cpu")
 
 	# Saving config parameters
 	config_file_name = file_name + "_config.json"
 	with open("./pytorch_models/" + config_file_name, 'w') as f:
 		config_dict = {k: v for (k, v) in vars(args).items()}
 		json.dump(config_dict, f, indent=2)
-
 
 	env = gym.make(args.env_name)
 	eval_env = gym.make(args.env_name)
@@ -66,8 +77,11 @@ if __name__ == "__main__":
 	max_action = float(env.action_space.high[0])
 
 	# Initialize policy and buffer
-	policy = TD3.TD3(state_dim, action_dim, max_action)
-	replay_buffer = utils.ReplayBuffer()
+	policy = TD3.TD3(state_dim, action_dim, max_action, device, K=args.K, rpf=args.rpf)
+	if args.priority:
+		replay_buffer = utils.PriorityReplayBuffer(timesteps=args.max_timesteps, alpha=args.alpha, beta=args.beta, eps=args.eps)
+	else:
+		replay_buffer = utils.ReplayBuffer()
 	total_timesteps = 0
 	total_episodes = 0
 	episode_timesteps = 0
