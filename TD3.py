@@ -224,8 +224,9 @@ class TD3(object):
 		# mean of entropies
 		total_ent = torch.sum(torch.log(var), dim=-1)
 		mean_ent = total_ent.mean(dim=1) / 2 + a_s * np.log(2) / 2
-		return ent_mean - mean_ent
-
+		jrd = ent_mean - mean_ent
+		jrd[jrd < 0] = 0
+		return jrd
 
 	def train(self, replay_buffer, iterations, batch_size=100, discount=0.99, tau=0.005, 
 		policy_noise=0.2, noise_clip=0.5, policy_freq=2, priority=False, total_steps=1000):
