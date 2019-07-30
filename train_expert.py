@@ -25,6 +25,7 @@ if __name__ == "__main__":
 	parser.add_argument("--discount", default=0.99, type=float)			# Discount factor for training
 	parser.add_argument("--tau", default=0.005, type=float)				# Target newtork update rate
 	parser.add_argument("--K", default=1, type=int)						# Number of ensemble members
+	parser.add_argument("--rpf", action="store_true")					# Whether to use randomized prior functions
 
 	# prioritized replay params
 	parser.add_argument("--priority", action="store_true")				# Whether or not to use prioritization
@@ -71,7 +72,7 @@ if __name__ == "__main__":
 	max_action = float(env.action_space.high[0])
 
 	# Initialize policy and buffer
-	policy = TD3.TD3(state_dim, action_dim, max_action, device, K=args.K)
+	policy = TD3.TD3(state_dim, action_dim, max_action, device, K=args.K, rpf=args.rpf)
 	if args.priority:
 		replay_buffer = utils.PriorityReplayBuffer(timesteps=args.max_timesteps, alpha=args.alpha, beta=args.beta, eps=args.eps)
 	else:

@@ -56,7 +56,7 @@ class RPFActor(nn.Module):
 			p.requires_grad = False
 
 	def forward(self, x):
-		x = torch.stack([self.priors[i].detach() + self.models[i](x) for i in range(self.K)])
+		x = torch.stack([self.priors[i](x).detach() + self.models[i](x) for i in range(self.K)])
 		return x
 
 class Critic(nn.Module):
@@ -143,7 +143,7 @@ class RPFCritic(nn.Module):
 		return torch.stack(qs)
 
 class TD3(object):
-	def __init__(self, state_dim, action_dim, max_action, device, K=1):
+	def __init__(self, state_dim, action_dim, max_action, device, K=1, rpf=False):
 		self.K = K
 		self.device = device
 		if self.K == 1:
@@ -152,11 +152,16 @@ class TD3(object):
 			self.critic = Critic(state_dim, action_dim).to(self.device)
 			self.critic_target = Critic(state_dim, action_dim).to(self.device)
 		else:
-			self.actor = EnsembleActor(state_dim, action_dim, max_action, K=self.K).to(self.device)
-			self.actor_target = EnsembleActor(state_dim, action_dim, max_action, K=self.K).to(self.device)
-			self.critic = EnsembleCritic(state_dim, action_dim, K=self.K).to(self.device)
-			self.critic_target = EnsembleCritic(state_dim, action_dim, K=self.K).to(self.device)
-
+			if rpf:
+				self.actor = RPFActor(state_dim, action_dim, max_action, K=self.K).to(self.device)
+				self.actor_target = RPFActor(state_dim, action_dim, max_action, K=self.K).to(self.device)
+				self.critic = RPFCritic(state_dim, action_dim, K=self.K).to(self.device)
+				self.critic_target = RPFCritic(state_dim, action_dim, K=self.K).to(self.device)
+			else:
+				self.actor = EnsembleActor(state_dim, action_dim, max_action, K=self.K).to(self.device)
+				self.actor_target = EnsembleActor(state_dim, action_dim, max_action, K=self.K).to(self.device)
+				self.critic = EnsembleCritic(state_dim, action_dim, K=self.K).to(self.device)
+				self.critic_target = EnsembleCritic(state_dim, action_dim, K=self.K).to(self.device)
 		self.actor_target.load_state_dict(self.actor.state_dict())
 		self.actor_optimizer = torch.optim.Adam(self.actor.parameters())
 		self.critic_target.load_state_dict(self.critic.state_dict())
