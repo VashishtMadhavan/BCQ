@@ -40,7 +40,15 @@ class EnsembleActor(nn.Module):
 	def __init__(self, state_dim, action_dim, max_action, K=5):
 		super(EnsembleActor, self).__init__()
 		self.K = K
+		self.max_action = max_action
 		self.models = nn.ModuleList([Actor(state_dim, action_dim, max_action) for _ in range(self.K)])
+
+	def mu_var(self, x):
+		mu_K = []; var_K = []
+		for i in range(self.K):
+			mu, var = self.models[i].mu_var(x)
+			mu_K.append(mu); var_K.append(var)
+		return torch.stack(mu_K), torch.stack(var_K)
 
 	def forward(self, x):
 		x = torch.stack([self.models[i](x) for i in range(self.K)])
@@ -50,10 +58,19 @@ class RPFActor(nn.Module):
 	def __init__(self, state_dim, action_dim, max_action, K=5):
 		super(RPFActor, self).__init__()
 		self.K = K
+		self.max_action = max_action
 		self.priors = nn.ModuleList([Actor(state_dim, action_dim, max_action) for _ in range(self.K)])
 		self.models = nn.ModuleList([Actor(state_dim, action_dim, max_action) for _ in range(self.K)])
 		for p in self.priors.parameters():
 			p.requires_grad = False
+
+	def mu_var(self, x):
+		mu_K = []; var_K = []
+		for i in range(self.K):
+			mu, var = self.models[i].mu_var(x)
+			mu_p, var_p = self.priors[i].mu_var(x)
+			mu_K.append(mu + mu_p.detach()); var_K.append(var + var_p.detach())
+		return torch.stack(mu_K), torch.stack(var_K)
 
 	def forward(self, x):
 		x = torch.stack([self.priors[i](x).detach() + self.models[i](x) for i in range(self.K)])
@@ -181,8 +198,13 @@ class TD3(object):
 	# Estimates Jensen-Renyi divergence for ensemble mixture of gaussians
 	def _jrd(self, state):
 		with torch.no_grad():
-			mu, var = self.actor(state) # [B, K, A]
-		mu = torch.tanh(mu) * self.actor.max_action # TODO: confirm that this is correcy
+			mu, var = self.actor.mu_var(state) # [K, B, A]
+		mu = torch.tanh(mu) * self.actor.max_action # TODO: confirm that this is correct
+
+		# reshaping tensor to [B, K, A]
+		mu = mu.permute(1, 0, 2)
+		var = var.permute(1, 0, 2)
+
 		mu_diff = mu.unsqueeze(1) - mu.unsqueeze(2)
 		var_sum = var.unsqueeze(1) + var.unsqueeze(2)
 		n_act, es, a_s = mu.size()
@@ -197,7 +219,7 @@ class TD3(object):
 		log_z = log_z - mx
 		exp = torch.exp(log_z).mean(dim=1, keepdim=True)
 		ent_mean = -mx - torch.log(exp)
-		ent_mean = entropy_mean[:, 0]
+		ent_mean = ent_mean[:, 0]
 
 		# mean of entropies
 		total_ent = torch.sum(torch.log(var), dim=-1)
@@ -246,7 +268,7 @@ class TD3(object):
 					priorities = critic_loss.detach().cpu().numpy().squeeze()
 				else:
 					# Estimating Jensen-Renyi divergence between policies
-					priorities = self._jrd(state)
+					priorities = self._jrd(state).cpu().numpy()
 					critic_loss = torch.mean(critic_loss, dim=0)
 				replay_buffer.update_priorities(idxes, priorities)
 				critic_loss = torch.mean(weights * critic_loss)
