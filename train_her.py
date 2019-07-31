@@ -4,6 +4,7 @@ import gym
 import argparse
 from collections import deque
 import os
+import json
 import utils
 import TD3
 
@@ -38,9 +39,6 @@ if __name__ == "__main__":
 	parser.add_argument("--policy_noise", default=0.2, type=float)		# Noise added to target policy during critic update
 	parser.add_argument("--noise_clip", default=0.5, type=float)		# Range to clip target policy noise
 	parser.add_argument("--policy_freq", default=2, type=int)			# Frequency of delayed policy updates
-
-	# HER specific parameters
-	parser.add_argument("--hindsight_goals", default=4, type=int).      # number of goals to relabel experience with in an episode
 	args = parser.parse_args()
 
 	file_name = "HER_%s_%s" % (args.env_name, str(args.seed))
@@ -59,7 +57,7 @@ if __name__ == "__main__":
 
 	# Saving config parameters
 	config_file_name = file_name + "_config.json"
-	with open("./pytorch_models/" + config_file_name, 'w') as f:
+	with open("./her_models/" + config_file_name, 'w') as f:
 		config_dict = {k: v for (k, v) in vars(args).items()}
 		json.dump(config_dict, f, indent=2)
 
@@ -98,7 +96,6 @@ if __name__ == "__main__":
 		if done: 
 			if total_timesteps != 0:
 				# Relabel experience with different goals
-				# TODO: change this to use multiple goals
 				g = episode_storage[-1][1][-6:-3]
 				for item in episode_storage:
 					x_h, x_tp1_h, a_h, d_h = item

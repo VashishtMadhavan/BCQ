@@ -6,7 +6,6 @@ from collections import deque
 import os
 import json
 import utils
-import DDPG
 import TD3
 
 # Shortened version of code originally found at https://github.com/sfujim/TD3
