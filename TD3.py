@@ -265,12 +265,9 @@ class TD3(object):
 
 			# Updating priorities
 			if priority:
-				if self.K == 1:
-					priorities = critic_loss.detach().cpu().numpy().squeeze()
-				else:
-					# Estimating Jensen-Renyi divergence between policies
-					priorities = self._jrd(state).cpu().numpy()
+				if self.K > 1:
 					critic_loss = torch.mean(critic_loss, dim=0)
+				priorities = critic_loss.detach().cpu().numpy().squeeze()
 				replay_buffer.update_priorities(idxes, priorities)
 				critic_loss = torch.mean(weights * critic_loss)
 			else:
