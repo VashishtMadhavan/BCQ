@@ -8,17 +8,16 @@ import json
 import utils
 import TD3
 
-def compute_reward(x, g, scale=0.1):
-	curr_pos = x[-6:-3]
+def compute_reward(curr_pos, g, scale=0.5):
 	return -1.0 * float(np.linalg.norm(curr_pos - g) > scale)
 
 if __name__ == "__main__":
 	parser = argparse.ArgumentParser()
-	parser.add_argument("--env_name", default="BigReacher-v2")				# OpenAI gym environment name
+	parser.add_argument("--env_name", default="AntMaze-v2")				# OpenAI gym environment name
 	parser.add_argument("--seed", default=0, type=int)					# Sets Gym, PyTorch and Numpy seeds
 	parser.add_argument("--max_timesteps", default=10e6, type=float)		# Max time steps to run environment for
 	parser.add_argument("--start_timesteps", default=1e4, type=int)		# How many time steps purely random policy is run for
-	parser.add_argument("--test_eps", default=10, type=int)             # Number of evaluation episodes to run
+	parser.add_argument("--test_eps", default=10, type=int)				# Number of evaluation episodes to run
 	parser.add_argument("--gpu", default=0, type=int)					# Which GPU to use; -1 for CPU
 
 	# training parameters
@@ -96,17 +95,17 @@ if __name__ == "__main__":
 		if done: 
 			if total_timesteps != 0:
 				# Relabel experience with different goals
-				g = episode_storage[-1][1][-6:-3]
+				g = episode_storage[-1][1][2:5]
 				for item in episode_storage:
 					x_h, x_tp1_h, a_h, d_h = item
-					r_g = compute_reward(x_tp1_h, g)
+					r_g = compute_reward(x_tp1_h[2:5], g)
 					x_h[-3:] = g; x_tp1_h[-3:] = g
 					replay_buffer.add((x_h, x_tp1_h, a_h, r_g, d_h))
 				policy.train(replay_buffer, episode_timesteps, args.batch_size, args.discount,
-					args.tau, args.policy_noise, args.noise_clip, args.policy_freq)
+					args.tau, args.policy_noise, args.noise_clip, args.policy_freq, args.priority, total_timesteps)
 
 			# Evaluate and Save Policy
-			if total_episodes % 10 == 0:
+			if total_episodes % 5 == 0:
 				eval_rew_mean = 0. if len(eval_rew_buffer) == 0 else np.mean(eval_rew_buffer)
 				eval_succ_mean = 0. if len(eval_succ_buffer) == 0 else np.mean(eval_succ_buffer)
 				print("Total T: %d Total Ep: %d Eval Avg. Rew: %f Eval Avg. Success: %f" % 
@@ -134,15 +133,15 @@ if __name__ == "__main__":
 		# Perform action + Store Data in Buffer
 		new_obs, reward, done, _ = env.step(action)
 		eval_obs, eval_rew, eval_done, _ = eval_env.step(eval_action)
-		eval_return += compute_reward(eval_obs, eval_obs[-3:])
-		eval_succ += compute_reward(eval_obs, eval_obs[-3:]) + 1.0
+		eval_return += compute_reward(eval_env.unwrapped.get_current_pos(), eval_obs[-3:])
+		eval_succ += compute_reward(eval_env.unwrapped.get_current_pos(), eval_obs[-3:]) + 1.0
 		if eval_done:
 			eval_rew_buffer.append(eval_return)
 			eval_succ_buffer.append(np.sign(eval_succ))
 			eval_obs = eval_env.reset()
 			eval_return = 0.; eval_succ = 0.
 
-		replay_buffer.add((obs, new_obs, action, compute_reward(new_obs, obs[-3:]), float(done)))
+		replay_buffer.add((obs, new_obs, action, compute_reward(env.unwrapped.get_current_pos(), obs[-3:]), float(done)))
 		episode_storage.append((obs, new_obs, action, float(done)))
 		obs = new_obs
 		total_timesteps += 1

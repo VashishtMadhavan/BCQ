@@ -196,7 +196,7 @@ class TD3(object):
 				return total_actions[ensemble_idx]
 
 	# Estimates Jensen-Renyi divergence for ensemble mixture of gaussians
-	def _jrd(self, state):
+	def jrd(self, state):
 		with torch.no_grad():
 			mu, var = self.actor.mu_var(state) # [K, B, A]
 		mu = torch.tanh(mu) * self.actor.max_action # TODO: confirm that this is correct
