@@ -11,7 +11,7 @@ import TD3
 # Shortened version of code originally found at https://github.com/sfujim/TD3
 if __name__ == "__main__":
 	parser = argparse.ArgumentParser()
-	parser.add_argument("--env_name", default="Ant-v2")				# OpenAI gym environment name
+	parser.add_argument("--env_name", default="AntMaze-v2")				# OpenAI gym environment name
 	parser.add_argument("--seed", default=0, type=int)					# Sets Gym, PyTorch and Numpy seeds
 	parser.add_argument("--max_timesteps", default=1e6, type=float)		# Max time steps to run environment for
 	parser.add_argument("--start_timesteps", default=1e4, type=int)		# How many time steps purely random policy is run for
@@ -45,6 +45,8 @@ if __name__ == "__main__":
 
 	if not os.path.exists("./pytorch_models"):
 		os.makedirs("./pytorch_models")
+	if not os.path.exists("./buffers"):
+		os.makedirs("./buffers")
 
 	if torch.cuda.is_available():
 		torch.cuda.set_device(args.gpu)
@@ -67,7 +69,7 @@ if __name__ == "__main__":
 	np.random.seed(args.seed)
 	
 	state_dim = env.observation_space.shape[0]
-	action_dim = env.action_space.shape[0] 
+	action_dim = env.action_space.shape[0]
 	max_action = float(env.action_space.high[0])
 
 	# Initialize policy and buffer
@@ -94,11 +96,12 @@ if __name__ == "__main__":
 					args.tau, args.policy_noise, args.noise_clip, args.policy_freq, args.priority, total_timesteps)
 
 			# Evaluate and Save Policy
-			if total_episodes % 1 == 0:
+			if total_episodes % 10 == 0:
 				eval_rew_mean = 0. if len(eval_rew_buffer) == 0 else np.mean(eval_rew_buffer)
 				print("Total T: %d Total Ep: %d Eval Avg Rew: %f" % 
 					(total_timesteps, total_episodes, eval_rew_mean))
 				policy.save(file_name, directory="./pytorch_models")
+				replay_buffer.save(file_name)
 			
 			# Reset environment
 			obs = env.reset()
@@ -133,3 +136,4 @@ if __name__ == "__main__":
 
 	# Save final policy
 	policy.save("%s" % (file_name), directory="./pytorch_models")
+	replay_buffer.save(file_name)

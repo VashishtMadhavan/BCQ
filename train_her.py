@@ -8,7 +8,7 @@ import json
 import utils
 import TD3
 
-def compute_reward(curr_pos, g, scale=0.5):
+def compute_reward(curr_pos, g, scale=0.1):
 	return -1.0 * float(np.linalg.norm(curr_pos - g) > scale)
 
 if __name__ == "__main__":
@@ -47,6 +47,8 @@ if __name__ == "__main__":
 
 	if not os.path.exists("./her_models"):
 		os.makedirs("./her_models")
+	if not os.path.exists("./buffers"):
+		os.makedirs("./buffers")
 
 	if torch.cuda.is_available():
 		torch.cuda.set_device(args.gpu)
@@ -111,6 +113,7 @@ if __name__ == "__main__":
 				print("Total T: %d Total Ep: %d Eval Avg. Rew: %f Eval Avg. Success: %f" % 
 					(total_timesteps, total_episodes, eval_rew_mean, eval_succ_mean))
 				policy.save(file_name, directory="./her_models")
+				replay_buffer.save(file_name)
 			
 			# Reset environment
 			obs = env.reset()
@@ -149,4 +152,5 @@ if __name__ == "__main__":
 
 	# Save final policy
 	policy.save("%s" % (file_name), directory="./her_models")
+	replay_buffer.save(file_name)
 			

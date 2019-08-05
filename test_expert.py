@@ -10,7 +10,7 @@ import TD3
 if __name__ == "__main__":
 	
 	parser = argparse.ArgumentParser()
-	parser.add_argument("--env", type=str, default="Ant-v2")
+	parser.add_argument("--env", type=str, default="AntMaze-v2")
 	parser.add_argument("--checkpoint", type=str)
 	parser.add_argument("--test_eps", type=int, default=10)
 	parser.add_argument("--render",  action="store_true")
