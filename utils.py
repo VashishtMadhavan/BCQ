@@ -6,12 +6,19 @@ from sum_tree import SumSegmentTree, MinSegmentTree, LinearSchedule
 
 # Simple replay buffer
 class ReplayBuffer(object):
-	def __init__(self):
+	def __init__(self, max_size=int(1e6)):
 		self.storage = []
+		self.max_size = max_size
+		self.curr_idx = 0
 
 	# Expects tuples of (state, next_state, action, reward, done)
 	def add(self, data):
-		self.storage.append(data)
+		if self.curr_idx < self.max_size:
+			self.storage.append(data)
+		else:
+			idx = self.curr_idx % self.max_size
+			self.storage[idx] = data
+		self.curr_idx += 1
 
 	def sample(self, batch_size):
 		ind = np.random.randint(0, len(self.storage), size=batch_size)
@@ -39,11 +46,13 @@ class ReplayBuffer(object):
 
 # Replay buffer with priority sampling
 class PriorityReplayBuffer(object):
-	def __init__(self, timesteps=int(1e6), alpha=0.6, beta=0.5, eps=1e-6):
+	def __init__(self, timesteps=int(1e6), alpha=0.6, beta=0.5, eps=1e-6, max_size=1e6):
 		self.alpha = alpha
 		self.beta_schedule = LinearSchedule(tsteps=timesteps, init_p=beta, final_p=1.0)
 		self.eps = eps 
 		self.storage = []
+		self.max_size = max_size
+		self.curr_idx = 0
 
 		it_capacity = 1
 		while it_capacity < int(1e6):
@@ -55,8 +64,13 @@ class PriorityReplayBuffer(object):
 
 	# Expects tuples of (state, next_state, action, reward, done)
 	def add(self, data):
-		self.storage.append(data)
-		idx = len(self.storage) - 1
+		if self.curr_idx < self.max_size:
+			self.storage.append(data)
+			idx = len(self.storage) - 1
+		else:
+			idx = self.curr_idx % self.max_size
+			self.storage[idx] = data
+		self.curr_idx += 1
 		self._it_sum[idx] = self._max_priority ** self.alpha
 		self._it_min[idx] = self._max_priority ** self.alpha
 
