@@ -93,9 +93,18 @@ if __name__ == "__main__":
 	eval_done = False
 	eval_return = 0.; eval_succ = 0.
 
+	train_rew_buffer = deque(maxlen=args.test_eps)
+	train_succ_buffer = deque(maxlen=args.test_eps)
+	train_return = 0.; train_succ = 0.
+
 	while total_timesteps < args.max_timesteps:
 		if done: 
 			if total_timesteps != 0:
+				# Logging train success and rewards
+				train_rew_buffer.append(train_return)
+				train_succ_buffer.append(np.sign(train_succ))
+				train_return = 0.; train_succ = 0.
+
 				# Relabel experience with different goals
 				g = episode_storage[-1][1][2:5]
 				for item in episode_storage:
@@ -110,8 +119,13 @@ if __name__ == "__main__":
 			if total_episodes % 5 == 0:
 				eval_rew_mean = 0. if len(eval_rew_buffer) == 0 else np.mean(eval_rew_buffer)
 				eval_succ_mean = 0. if len(eval_succ_buffer) == 0 else np.mean(eval_succ_buffer)
-				print("Total T: %d Total Ep: %d Eval Avg. Rew: %f Eval Avg. Success: %f" % 
-					(total_timesteps, total_episodes, eval_rew_mean, eval_succ_mean))
+
+				train_rew_mean = 0. if len(train_rew_buffer) == 0 else np.mean(train_rew_buffer)
+				train_succ_mean = 0. if len(train_succ_buffer) == 0 else np.mean(train_succ_buffer)
+
+
+				print("Total T: %d Total Ep: %d Eval Avg. Rew: %f Eval Avg. Success: %f Train Avg. Rew: %f Train Avg. Success: %f" % 
+					(total_timesteps, total_episodes, eval_rew_mean, eval_succ_mean, train_rew_mean, train_succ_mean))
 				policy.save(file_name, directory="./her_models")
 				replay_buffer.save(file_name)
 			
@@ -136,6 +150,10 @@ if __name__ == "__main__":
 		# Perform action + Store Data in Buffer
 		new_obs, reward, done, _ = env.step(action)
 		eval_obs, eval_rew, eval_done, _ = eval_env.step(eval_action)
+
+		train_return += compute_reward(env.unwrapped.get_current_pos(), new_obs[-3:])
+		train_succ += compute_reward(env.unwrapped.get_current_pos(), new_obs[-3:]) + 1.0
+
 		eval_return += compute_reward(eval_env.unwrapped.get_current_pos(), eval_obs[-3:])
 		eval_succ += compute_reward(eval_env.unwrapped.get_current_pos(), eval_obs[-3:]) + 1.0
 		if eval_done:
